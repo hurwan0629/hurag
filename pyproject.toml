@@ -1,0 +1,20 @@
+[project]
+name = "hurag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "hurwan0629", email = "hurwan0629@gmail.com" }
+]
+requires-python = ">=3.12.7"
+dependencies = [
+    "charset-normalizer>=3.5.1",
+    "numpy>=2.5.3",
+]
+
+[project.scripts]
+hurag = "hurag:main"
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"

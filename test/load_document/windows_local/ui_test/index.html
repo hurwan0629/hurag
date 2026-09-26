@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markdown 파일 찾기</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 48px 20px; background: #f4f6fa; color: #1d2939; font-family: system-ui, sans-serif; }
+    main { max-width: 850px; margin: auto; padding: 28px; background: white; border: 1px solid #dce2ea; border-radius: 16px; }
+    h1 { margin-top: 0; font-size: 26px; }
+    p { color: #526174; }
+    label { display: block; margin-bottom: 8px; font-weight: 600; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    input { flex: 1; min-width: 180px; padding: 12px; border: 1px solid #98a2b3; border-radius: 8px; font: inherit; }
+    button { padding: 12px 20px; border: 0; border-radius: 8px; background: #245cce; color: white; font: inherit; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    :focus-visible { outline: 3px solid #89b4ff; outline-offset: 3px; }
+    #status { overflow-wrap: anywhere; }
+    ul { list-style: none; padding: 0; margin-bottom: 0; }
+    li { padding: 12px 0; border-top: 1px solid #e4e7ec; overflow-wrap: anywhere; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Markdown 파일 찾기</h1>
+    <p>입력한 폴더와 모든 하위 폴더의 .md 파일 목록을 표시합니다.</p>
+    <form id="search">
+      <label for="folder">폴더 경로</label>
+      <div class="row">
+        <input id="folder" name="folder" placeholder="C:\HUR\Document" required autocomplete="off">
+        <button type="submit">파일 찾기</button>
+      </div>
+    </form>
+    <p id="status" role="status" aria-live="polite">폴더 경로를 입력해 주세요.</p>
+    <ul id="files" aria-label="Markdown 파일 목록"></ul>
+  </main>
+  <script>
+    const form = document.querySelector('#search');
+    const status = document.querySelector('#status');
+    const files = document.querySelector('#files');
+    const button = form.querySelector('button');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      files.replaceChildren();
+      status.textContent = '파일을 찾고 있습니다…';
+      try {
+        const response = await fetch('/api/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: form.elements.folder.value })
+        });
+        if (!response.headers.get('Content-Type')?.includes('application/json')) {
+          throw new Error('Python 서버 주소 http://127.0.0.1:8000 에서 이용해 주세요.');
+        }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        status.textContent = `${data.folder} — ${data.files.length}개 파일`;
+        const fragment = document.createDocumentFragment();
+        for (const name of data.files) {
+          const item = document.createElement('li');
+          item.textContent = name;
+          fragment.append(item);
+        }
+        files.append(fragment);
+      } catch (error) {
+        status.textContent = `조회 실패: ${error.message}`;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
