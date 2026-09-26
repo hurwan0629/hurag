@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>retrieval_v1 · 로컬 문서 검색</title>
+<style>
+  * { box-sizing: border-box; } body { margin: 32px auto; padding: 0 20px; max-width: 960px; font-family: system-ui,sans-serif; color: #243047; background: #f5f7fa; }
+  section, article { background: white; border: 1px solid #d9dfea; border-radius: 12px; padding: 20px; margin: 16px 0; }
+  input, button, select { font: inherit; padding: 10px; margin: 4px; } input { width: min(100%,600px); } button { cursor: pointer; } button:disabled { cursor: wait; opacity: .5; }
+  li, pre, p { overflow-wrap: anywhere; } pre { white-space: pre-wrap; font: inherit; line-height: 1.6; } :focus-visible { outline: 3px solid #3978e8; } small { color: #56637b; }
+</style>
+<h1>로컬 문서 의미 검색</h1>
+<p>Markdown 동기화 → 청킹 → 임베딩 → 문서별 상위 5개</p>
+<section>
+  <h2>데이터 관리</h2>
+  <button id="add">폴더 추가</button><button id="sync">전체 동기화</button>
+  <ul id="folders"></ul>
+  <p id="stats">아직 동기화하지 않았습니다. 서버를 재시작하면 다시 동기화하세요.</p>
+</section>
+<section>
+  <h2>검색</h2>
+  <form id="search">
+    <label for="query">찾고 싶은 내용을 자연어로 입력하세요.</label><br>
+    <input id="query" required placeholder="데이터 전처리에서 결측값을 처리하는 방법">
+    <label for="scope">검색 범위</label><select id="scope"><option>전체</option><option>로컬 폴더</option></select>
+    <button>검색</button>
+  </form>
+  <p>AI 답변은 이번 실험에서 생성하지 않습니다. 날짜 필터는 적용하지 않습니다.</p>
+</section>
+<p id="status" role="status" aria-live="polite">폴더를 등록하고 동기화하세요. 첫 동기화에는 모델 다운로드 시간이 필요합니다.</p>
+<div id="results"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const key = 'hurag.retrieval_v1.folders';
+let folders = [];
+try { const saved = JSON.parse(localStorage.getItem(key) || '[]'); if (Array.isArray(saved)) folders = saved.filter(x => typeof x === 'string'); } catch {}
+function render() {
+  $('folders').replaceChildren();
+  for (const folder of folders) {
+    const li = document.createElement('li'); li.append(document.createTextNode(folder));
+    const remove = document.createElement('button'); remove.textContent = '삭제'; remove.setAttribute('aria-label', `${folder} 등록 해제`);
+    remove.onclick = () => { folders = folders.filter(x => x !== folder); save(); $('status').textContent = '변경 사항은 전체 동기화 후 검색에 반영됩니다.'; };
+    li.append(remove); $('folders').append(li);
+  }
+}
+function save() { render(); try { localStorage.setItem(key, JSON.stringify(folders)); } catch { $('status').textContent = '브라우저에 폴더 경로를 저장하지 못했습니다.'; } }
+async function request(path, data, message) {
+  document.querySelectorAll('button').forEach(x => x.disabled = true); $('status').textContent = message;
+  try {
+    const response = await fetch(`/api/${path}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    const result = await response.json(); if (!response.ok) throw new Error(result.error);
+    return result;
+  } finally { document.querySelectorAll('button').forEach(x => x.disabled = false); }
+}
+function failed(error) { $('status').textContent = `실패: ${error.message}`; }
+
+$('add').onclick = async () => {
+  try { const data = await request('folder', {}, '열린 폴더 선택 창에서 폴더를 선택하세요.');
+    if (data.folder && !folders.includes(data.folder)) { folders.push(data.folder); save(); }
+    $('status').textContent = '폴더 선택 완료. 전체 동기화로 검색에 반영하세요.';
+  } catch (error) { failed(error); }
+};
+$('sync').onclick = async () => {
+  try { const data = await request('sync', {folders}, '동기화 중… 첫 실행에는 임베딩 모델을 다운로드합니다.');
+    $('stats').textContent = `${data.documents}개 파일 · ${data.chunks}개 청크 · ${data.bytes.toLocaleString()} bytes · 빈 문서 ${data.empty}개 · ${data.synced_at}`;
+    $('results').replaceChildren(); $('status').textContent = '동기화 완료';
+  } catch (error) { failed(error); }
+};
+$('search').onsubmit = async (event) => {
+  event.preventDefault(); $('results').replaceChildren();
+  try { const data = await request('search', {query:$('query').value}, '검색 중…');
+    for (const hit of data.hits) {
+      const card = document.createElement('article'); const title = document.createElement('h3'); title.textContent = hit.title;
+      const meta = document.createElement('p'); meta.textContent = `코사인 유사도 ${hit.score.toFixed(4)} · ${hit.document_id}`;
+      const text = document.createElement('pre'); text.textContent = hit.text; card.append(title, meta, text); $('results').append(card);
+    }
+    $('status').textContent = data.hits.length ? `${data.hits.length}개 문서 검색 완료` : '검색 가능한 문서가 없습니다. 폴더와 동기화 상태를 확인하세요.';
+  } catch (error) { failed(error); }
+};
+render();
+</script>
+</html>
